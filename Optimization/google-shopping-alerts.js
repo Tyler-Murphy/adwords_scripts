@@ -4,12 +4,14 @@
 * Will e-mail any offending products for review.
 * Version 1.1
 * Created By: Derek Martin
+* Modified By: Tyler Murphy
 * DerekMartinLA.com
 ****************************************************************************************/
-var EMAIL_ADDRESS = "derekmartin1@gmail.com"
+var EMAIL_ADDRESS = "tmurphy@roirevolution.com"
+var SHEET_URL = "https://docs.google.com/spreadsheets/d/12AMmod0xIUx0Uyn6rCY74aM6Sn3Y1qsoIbE6kF4atJM/edit#gid=0"
 
 function main() {
-    var clientName = AdWordsApp.currentAccount().getName().split("-")[0];
+    var clientName = AdWordsApp.currentAccount().getName();
     var offendingProducts = []; // will hold list of product items that need review
     var products = [];
      
@@ -17,50 +19,42 @@ function main() {
 	offendingProducts = analyzeShoppingResults(products);
 	
   if (offendingProducts.length > 0) {
-    var file = createSpreadsheet(clientName,offendingProducts);
-    sendAnEmail(clientName[0], offendingProducts.toString(), file);
-  } // end of if statement
+    updateSpreadsheet(clientName, offendingProducts, SHEET_URL);
+    sendAnEmail(clientName, SHEET_URL);
+  }
 	
-} // end of main function
+}
 
 function runShoppingReport() {
+  var listOfProducts = [],
+      report = AdWordsApp.report(
+        'SELECT Date, Brand, OfferId, AverageCpc, Cost ' +
+        'FROM   SHOPPING_PERFORMANCE_REPORT ' +
+        'DURING LAST_7_DAYS'
+      ),
+      rows = report.rows();
 
-    // var reportFormat = _.str.quote(camp.getName());
-    var listOfProducts = [];
-  
- 	var report = AdWordsApp.report(
-     'SELECT Date, Brand, OfferId, AverageCpc, Cost ' +
-     'FROM   SHOPPING_PERFORMANCE_REPORT ' +
-      'DURING LAST_7_DAYS');
-    
-     var rows = report.rows();
+  while (rows.hasNext()) {
+    var row = rows.next();
+    listOfProducts.push(new ProductData(
+      row['Brand'],
+      row['OfferId'],
+      row['Date'],
+      row['AverageCpc'],
+      row['Cost']
+    ));
+  }
 
-	 while (rows.hasNext()) {
-		   var row = rows.next();
-       
-           var brand = row['Brand'];
-		   var offerId= row['OfferId'];
-           var date = row['Date'];   
-		   var averageCpc = row['AverageCpc'];
-		   var cost = row['Cost'];
-		              
-           var productResult = new productData(brand, offerId, date, averageCpc, cost);
-       
-           listOfProducts.push(productResult);
-           
-	 }  // end of report run
-    
-	 return listOfProducts;
-     
+  return listOfProducts;
 } 
 
-function productData(brand, offerId, date, averageCpc, totalCost) {
+function ProductData(brand, offerId, date, averageCpc, totalCost) {
 	this.brand = brand;
 	this.offerId = offerId;
 	this.date = date;
 	this.averageCpc = averageCpc;
 	this.totalCost = totalCost;
-} // end of productData
+}
 
 function analyzeShoppingResults (products) {
   var listOfProducts = products;
@@ -80,10 +74,10 @@ function analyzeShoppingResults (products) {
       var newestAvgCpc = parseFloat(currentOffer[currentOffer.length - 1].averageCpc);
       var newestCost = parseFloat(currentOffer[currentOffer.length - 1].totalCost);
       
-      var cpcChange = parseFloat((newestAvgCpc - oldestAvgCpc) / oldestAvgCpc).toFixed(2);
-      var costChange = parseFloat((newestCost - oldestCost) / oldestCost).toFixed(2);
+      var cpcChange = parseFloat(newestAvgCpc / oldestAvgCpc).toFixed(2);
+      var costChange = parseFloat(newestCost / oldestCost).toFixed(2);
 
-      var offerResult = new productResult(listOfProducts[i].brand, listOfProducts[i].offerId, oldestAvgCpc, newestAvgCpc, cpcChange, oldestCost, newestCost, costChange);
+      var offerResult = new ProductResult(listOfProducts[i].brand, listOfProducts[i].offerId, oldestAvgCpc, newestAvgCpc, cpcChange, oldestCost, newestCost, costChange);
   
       listOfResults.push(offerResult);
     } // end of length if statement
@@ -104,12 +98,11 @@ function analyzeShoppingResults (products) {
     return  product.cpcDelta <= -2 || product.cpcDelta >=2 || product.costDelta >= 2 || product.costDelta <= -2 ;
   });
     
- return offendingProducts;
-  
-} // end of analyzeShoppingResults
+  return offendingProducts;
+}
 
 
-function productResult (brand, id, oldCpc, newCpc, cpcDelta, oldCost, newCost, costDelta) {
+function ProductResult (brand, id, oldCpc, newCpc, cpcDelta, oldCost, newCost, costDelta) {
   this.brand = brand;
   this.productId = id;
   this.oldCpc = oldCpc;
@@ -118,77 +111,40 @@ function productResult (brand, id, oldCpc, newCpc, cpcDelta, oldCost, newCost, c
   this.oldCost = oldCost;
   this.newCost = newCost;
   this.costDelta = costDelta;
-    
-} // end of productResult
+}
 
-function createSpreadsheet(client,results) {
+function updateSpreadsheet(client, results, spreadsheetUrl) {
   
   var productResults = results;
   var clientName = client;
   var spreadsheetName = clientName + '-shoppingreport';
-  
-  var newSS = SpreadsheetApp.create(spreadsheetName, results.length, 26);
-  
-  var sheet = newSS.getActiveSheet();
-  
-  var columnNames = ["ProductId", "Brand", "Old AvgCpc", "New AvgCpc", "AvgCpc Delta", "Old Daily Cost", "New Daily Cost", "Cost Delta"];
-  
-  var headersRange = sheet.getRange(1, 1, 1, columnNames.length);
+  var columnNames = ["ProductId", "Brand", "Old AvgCpc", "New AvgCpc", "New / Old", "Old Daily Cost", "New Daily Cost", "New / Old"];
+  var sheet = SpreadsheetApp.openByUrl(spreadsheetUrl).getSheets()[0].clearContents();
+  var dataRange = sheet.getRange(2, 1, results.length, columnNames.length);
 
-  for (i = 0; i < productResults.length; i++) {
-    
-    headersRange.setValues([columnNames]);
- 
-     var product;
-     product = productResults[i].productId;
-     var productBrand = productResults[i].brand;
-     var oldAvgCpc = productResults[i].oldCpc;
-     var newAvgCpc = productResults[i].newCpc;
-     var cpcDelta = productResults[i].cpcDelta;
-     var oldCost = productResults[i].oldCost;
-     var newCost = productResults[i].newCost
-     var costDelta = productResults[i].costDelta;
-     
-    sheet.appendRow([product, productBrand, oldAvgCpc, newAvgCpc, cpcDelta, oldCost, newCost, costDelta]);
-    
-    // Sets the first column to a width which fits the text
-    sheet.setColumnWidth(1, 300);
-    
-    var range = sheet.getRange(sheet.getMaxColumns(), sheet.getMaxRows());
+  var productArray = productResults.map(function(product) {
+    return [
+      product.productId,
+      product.brand,
+      product.oldCpc,
+      product.newCpc,
+      product.cpcDelta,
+      product.oldCost,
+      product.newCost,
+      product.costDelta
+    ];
+  });
 
-    range.setFontFamily("Helvetica");
-    range.setFontSize(30);
-
-  }
-  
-  return newSS.getUrl();
-  
+  sheet.getRange(1, 1, 1, columnNames.length).setValues([columnNames]);
+  dataRange.setValues(productArray);  
 }
 
-function sendAnEmail (clientName, results, fileUrl) {
- 
-  var data = Utilities.parseCsv(results, '\t');
-  var today = new Date();
-  today = today.getMonth() + today.getDate() + today.getFullYear();
-  
-  var filename = clientName + 'search-results' + today;
-  
-  // Send an email with Search list attachment
-   var blob = Utilities.newBlob(results, 'text/html', '');
-    
-  MailApp.sendEmail(EMAIL_ADDRESS, clientName + ' -  Google Shopping Alert Results ', 'There are Google Shopping Products that need your attention. You can find the results at the following URL:\n\n' + fileUrl, {
-     name: 'Google Shopping Alert'
- });
-  
-} // end of sendAnEmail function
-/* HELPER FUNCTIONS */
-
-function warn(msg) {
-  Logger.log('WARNING: '+msg);
-}
- 
-function info(msg) {
-  Logger.log(msg);
+function sendAnEmail (clientName, fileUrl) {    
+  MailApp.sendEmail(
+    EMAIL_ADDRESS,
+    clientName + ' -  Google Shopping Alert Results',
+    'There are Google Shopping Products that need your attention. You can find the results at the following URL:\n\n' + fileUrl
+  );
 }
 
 /* UNDERSCORE LIBRARIES */
