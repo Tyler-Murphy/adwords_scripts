@@ -1,5 +1,5 @@
 /***************************************************************************************
-* AdWords Account Management  -- Review Google Shopping Products for sharp changes in 
+* AdWords Account Management  -- Review Google Shopping Products for sharp changes in
 * Product level Cost and Product level Avg CPC (200%+ or -200%)
 * Will e-mail any offending products for review.
 * Version 1.1
@@ -7,22 +7,22 @@
 * Modified By: Tyler Murphy
 * DerekMartinLA.com
 ****************************************************************************************/
-var EMAIL_ADDRESS = "tmurphy@roirevolution.com"
-var SHEET_URL = "https://docs.google.com/spreadsheets/d/12AMmod0xIUx0Uyn6rCY74aM6Sn3Y1qsoIbE6kF4atJM/edit#gid=0"
+var EMAIL_ADDRESS = "COMPLETE"
+var SHEET_URL = "COMPLETE"
 
 function main() {
     var clientName = AdWordsApp.currentAccount().getName();
     var offendingProducts = []; // will hold list of product items that need review
     var products = [];
-     
+
 	products = runShoppingReport();
 	offendingProducts = analyzeShoppingResults(products);
-	
+
   if (offendingProducts.length > 0) {
     updateSpreadsheet(clientName, offendingProducts, SHEET_URL);
     sendAnEmail(clientName, SHEET_URL);
   }
-	
+
 }
 
 function runShoppingReport() {
@@ -46,7 +46,7 @@ function runShoppingReport() {
   }
 
   return listOfProducts;
-} 
+}
 
 function ProductData(brand, offerId, date, averageCpc, totalCost) {
 	this.brand = brand;
@@ -59,45 +59,45 @@ function ProductData(brand, offerId, date, averageCpc, totalCost) {
 function analyzeShoppingResults (products) {
   var listOfProducts = products;
   var listOfResults = [];
- 
+
   listOfProducts = _.uniq(listOfProducts);
   listOfProducts.sort(); // sort list to keep things clean
-  
+
   var i = 0;
   for each (offerId in listOfProducts) {
-   
+
     var currentOffer = _.where(listOfProducts, {offerId: listOfProducts[i].offerId});
     if (currentOffer.length > 1) { // check if there are multiple dates at play, this way we can calculate min and max-
-     
+
       var oldestAvgCpc = parseFloat(currentOffer[0].averageCpc);
       var oldestCost = parseFloat(currentOffer[0].totalCost);
       var newestAvgCpc = parseFloat(currentOffer[currentOffer.length - 1].averageCpc);
       var newestCost = parseFloat(currentOffer[currentOffer.length - 1].totalCost);
-      
+
       var cpcChange = parseFloat(newestAvgCpc / oldestAvgCpc).toFixed(2);
       var costChange = parseFloat(newestCost / oldestCost).toFixed(2);
 
       var offerResult = new ProductResult(listOfProducts[i].brand, listOfProducts[i].offerId, oldestAvgCpc, newestAvgCpc, cpcChange, oldestCost, newestCost, costChange);
-  
+
       listOfResults.push(offerResult);
     } // end of length if statement
     i++;
   } // end of for each
-   
+
    listOfResults = _.uniq(listOfResults);
-  
+
    listOfResults.sort();
-   
-   var uniqueList = _.uniq(listOfResults, function(item, key, productId) { 
+
+   var uniqueList = _.uniq(listOfResults, function(item, key, productId) {
     return item.productId;
    } );
-   
-  uniqueList.sort();         
-   
+
+  uniqueList.sort();
+
   var offendingProducts = _.filter (uniqueList, function(product) {
     return  product.cpcDelta <= -2 || product.cpcDelta >=2 || product.costDelta >= 2 || product.costDelta <= -2 ;
   });
-    
+
   return offendingProducts;
 }
 
@@ -114,7 +114,7 @@ function ProductResult (brand, id, oldCpc, newCpc, cpcDelta, oldCost, newCost, c
 }
 
 function updateSpreadsheet(client, results, spreadsheetUrl) {
-  
+
   var productResults = results;
   var clientName = client;
   var spreadsheetName = clientName + '-shoppingreport';
@@ -136,10 +136,10 @@ function updateSpreadsheet(client, results, spreadsheetUrl) {
   });
 
   sheet.getRange(1, 1, 1, columnNames.length).setValues([columnNames]);
-  dataRange.setValues(productArray);  
+  dataRange.setValues(productArray);
 }
 
-function sendAnEmail (clientName, fileUrl) {    
+function sendAnEmail (clientName, fileUrl) {
   MailApp.sendEmail(
     EMAIL_ADDRESS,
     clientName + ' -  Google Shopping Alert Results',
